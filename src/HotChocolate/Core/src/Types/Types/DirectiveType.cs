@@ -143,6 +143,33 @@ public partial class DirectiveType
     public object Parse(DirectiveNode directiveNode)
         => _parse(directiveNode);
 
+    /// <summary>
+    /// Parses a directive node with variable context.
+    /// </summary>
+    /// <param name="directiveNode">The directive node to parse.</param>
+    /// <param name="context">The middleware context containing variable values.</param>
+    /// <returns>The parsed directive value.</returns>
+    internal object ParseWithContext(DirectiveNode directiveNode, IMiddlewareContext context)
+    {
+        var coercedValues = new object?[Arguments.Count];
+        var argumentIndex = 0;
+        var parserContext = new InputParserContext(context.Variables);
+
+        foreach (var argument in Arguments)
+        {
+            var argumentNode = directiveNode.Arguments
+                .FirstOrDefault(a => a.Name.Value.Equals(argument.Name));
+
+            var value = argumentNode?.Value ?? argument.DefaultValue ?? NullValueNode.Default;
+            coercedValues[argumentIndex++] = _inputParser.ParseLiteral(
+                value,
+                argument,
+                parserContext);
+        }
+
+        return CreateInstance(coercedValues);
+    }
+
     public DirectiveNode Format(object runtimeValue)
         => _format(runtimeValue);
 

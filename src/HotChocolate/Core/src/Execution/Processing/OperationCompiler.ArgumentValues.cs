@@ -210,12 +210,17 @@ public sealed partial class OperationCompiler
                 && directiveType.Middleware is not null
                 && (directiveType.IsRepeatable || processed.Add(directiveType.Name)))
             {
-                var directive = new Directive(
+                var lazyDirective = new LazyDirective(
                     directiveType,
                     directiveNode,
-                    directiveType.Parse(directiveNode));
+                    context => directiveType.ParseWithContext(directiveNode, context));
+
                 var directiveMiddleware = directiveType.Middleware;
-                pipelineComponents.Add(next => directiveMiddleware(next, directive));
+                pipelineComponents.Add(next => context =>
+                {
+                    var resolvedDirective = lazyDirective.ResolveAsync(context).AsTask().Result;
+                    return directiveMiddleware(next, resolvedDirective)(context);
+                });
             }
         }
     }

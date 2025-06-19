@@ -31,24 +31,45 @@ public sealed class InputParser
         _ignoreAdditionalInputFields = options.IgnoreAdditionalInputFields;
     }
 
-    public object? ParseLiteral(IValueNode value, IInputValueInfo field, Type? targetType = null)
+    // Base method that other overloads will call
+    private object? ParseLiteralWithContext(
+        IValueNode value,
+        IInputValueInfo field,
+        Type? runtimeType,
+        InputParserContext? context)
+    {
+        if (value.Kind == SyntaxKind.Variable && context?.Variables is not null)
+        {
+            var variableName = ((VariableNode)value).Name.Value;
+            if (context.Variables.TryGetValue<IValueNode>(variableName, out var variableValue))
+            {
+                // If we got a variable value, we need to parse it as a literal
+                return ParseLiteralWithContext(variableValue, field, runtimeType, context);
+            }
+        }
+
+        return ParseLiteralInternal(value, field.Type, Path.Root.Append(field.Name), 0, true, field);
+    }
+
+    // Public methods that will call the base implementation
+    public object? ParseLiteral(IValueNode value, IInputValueInfo field, Type? runtimeType = null)
     {
         ArgumentNullException.ThrowIfNull(value);
         ArgumentNullException.ThrowIfNull(field);
 
-        var path = Path.Root.Append(field.Name);
-        var runtimeValue = ParseLiteralInternal(value, field.Type, path, 0, true, field);
-        runtimeValue = FormatValue(field, runtimeValue);
+        return ParseLiteralWithContext(value, field, runtimeType, null);
+    }
 
-        // Caller doesn't care, but to ensure specificity, we set the field's runtime type
-        // to make sure it's at least converted to the right type.
-        // e.g. from a list to an array if it should be an array
-        if (targetType == null || targetType == typeof(object))
-        {
-            targetType = field.RuntimeType;
-        }
+    public object? ParseLiteral(
+        IValueNode value,
+        IInputValueInfo field,
+        InputParserContext context)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        ArgumentNullException.ThrowIfNull(field);
+        ArgumentNullException.ThrowIfNull(context);
 
-        return ConvertValue(targetType, runtimeValue);
+        return ParseLiteralWithContext(value, field, null, context);
     }
 
     public object? ParseLiteral(IValueNode value, IType type, Path? path = null)
